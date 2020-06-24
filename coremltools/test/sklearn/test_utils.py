@@ -17,9 +17,18 @@ if HAS_SKLEARN:
 
 @unittest.skipIf(not HAS_SKLEARN, 'Missing scikit-learn. Skipping tests.')
 class PipeLineRenameTests(unittest.TestCase):
+    """
+    Unit test class for testing scikit-learn converter.
+    """
 
     @classmethod
     def setUpClass(self):
+        """
+        Set up the unit test by loading the dataset and training a model.
+        """
+
+        if not(HAS_SKLEARN):
+            return
 
         scikit_data = load_boston()
         feature_names = scikit_data.feature_names
@@ -44,7 +53,5 @@ class PipeLineRenameTests(unittest.TestCase):
         
         # Check the predictions
         if is_macos() and macos_version() >= (10, 13):
-            out_dict = model.predict({'input': sample_data})
-            out_dict_renamed = renamed_model.predict({'renamed_input': sample_data})
-            self.assertAlmostEqual(list(out_dict.keys()), list(out_dict_renamed.keys()))
-            self.assertAlmostEqual(list(out_dict.values()), list(out_dict_renamed.values()))
+            self.assertEquals(model.predict({'input': sample_data}),
+                              renamed_model.predict({'renamed_input': sample_data}))

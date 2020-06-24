@@ -11,7 +11,8 @@ from collections import OrderedDict as _OrderedDict
 from ...models import datatypes
 from ...models import MLModel as _MLModel
 from ...models import _MLMODEL_FULL_PRECISION, _MLMODEL_HALF_PRECISION, _VALID_MLMODEL_PRECISION_TYPES
-from ...models.utils import _convert_neural_network_spec_weights_to_fp16
+from ...models.utils import convert_neural_network_weights_to_fp16 as convert_neural_network_weights_to_fp16
+from ...models.utils import convert_neural_network_spec_weights_to_fp16 as convert_neural_network_spec_weights_to_fp16
 
 from ..._deps import HAS_KERAS_TF as _HAS_KERAS_TF
 from ..._deps import HAS_KERAS2_TF as _HAS_KERAS2_TF
@@ -587,7 +588,7 @@ def convertToSpec(model,
             'Keras not found or unsupported version or backend found. keras conversion API is disabled.')
 
     if model_precision == _MLMODEL_HALF_PRECISION and model is not None:
-        spec = _convert_neural_network_spec_weights_to_fp16(spec)
+        spec = convert_neural_network_spec_weights_to_fp16(spec)
 
     return spec
 

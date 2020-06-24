@@ -3,9 +3,10 @@
 # Use of this source code is governed by a BSD-3-clause license that can be
 # found in the LICENSE.txt file or at https://opensource.org/licenses/BSD-3-Clause
 import json as _json
+import os
 import os as _os
 import tempfile as _tempfile
-import warnings as _warnings
+import warnings
 from copy import deepcopy as _deepcopy
 
 from ._graph_visualization import \
@@ -16,7 +17,6 @@ from .utils import load_spec as _load_spec
 from .utils import macos_version as _macos_version
 from .utils import save_spec as _save_spec
 from ..proto import Model_pb2 as _Model_pb2
-from coremltools.models._deprecation import deprecated
 
 _MLMODEL_FULL_PRECISION = 'float32'
 _MLMODEL_HALF_PRECISION = 'float16'
@@ -91,7 +91,6 @@ def _get_proxy_and_spec(filename, use_cpu_only=False):
     except Exception:
         _MLModelProxy = None
 
-    filename = _os.path.expanduser(filename)
     specification = _load_spec(filename)
 
     if _MLModelProxy:
@@ -106,7 +105,7 @@ def _get_proxy_and_spec(filename, use_cpu_only=False):
         try:
             return _MLModelProxy(filename, use_cpu_only), specification
         except RuntimeError as e:
-            _warnings.warn(
+            warnings.warn(
                 "You will not be able to run predict() on this Core ML model." +
                 " Underlying exception message was: " + str(e),
                 RuntimeWarning)
@@ -114,7 +113,7 @@ def _get_proxy_and_spec(filename, use_cpu_only=False):
 
     return None, specification
 
-@deprecated
+
 class NeuralNetworkShaper(object):
     """
     This class computes the intermediate tensor shapes for a neural network model.
@@ -219,7 +218,7 @@ class MLModel(object):
             _save_spec(model, filename)
             self.__proxy__, self._spec = _get_proxy_and_spec(filename, useCPUOnly)
             try:
-                _os.remove(filename)
+                os.remove(filename)
             except OSError:
                 pass
         else:
@@ -288,7 +287,6 @@ class MLModel(object):
         >>> model.save('my_model_file.mlmodel')
         >>> loaded_model = MLModel('my_model_file.mlmodel')
         """
-        filename = _os.path.expanduser(filename)
         _save_spec(self._spec, filename)
 
     def get_spec(self):
@@ -359,7 +357,6 @@ class MLModel(object):
             else:
                 raise Exception('Unable to load CoreML.framework. Cannot make predictions.')
 
-    @deprecated
     def visualize_spec(self, port=None, input_shape_dict=None, title='CoreML Graph Visualization'):
         """
         Visualize the model.

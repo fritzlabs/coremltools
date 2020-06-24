@@ -20,14 +20,15 @@ For the latest changes please see the [release notes](https://github.com/apple/c
 
 # Table of Contents
 
-- [Neural network conversion](#Neural-network-conversion)
-- [Core ML specification](#Core-ML-specification)
-- [coremltools user guide and examples](#user-guide-and-examples)
-- [Installation from Source](#Installation)
+* [Neural network conversion](#Neural-network-conversion)
+* [Core ML specification](#Core-ML-specification)
+* [coremltools user guide and examples](#user-guide-and-examples)
+* [Installation from Source](#Installation)
+
 
 ## Neural Network Conversion
 
-[Link](examples/NeuralNetworkGuide.md) to the detailed NN conversion guide.
+[Link](docs/NeuralNetworkGuide.md) to the detailed NN conversion guide.
 
 There are several `converters` available to translate neural networks trained
 in various frameworks into the Core ML model format.  Following formats can be
@@ -48,7 +49,7 @@ For iOS 12 or earlier, the code path is different and lives entirely in the [tfc
 
 To get an overview on how to use the converters and features such as
 post-training quantization using coremltools, please see the [neural network
-guide](examples/NeuralNetworkGuide.md).  
+guide](docs/NeuralNetworkGuide.md).  
 
 ## Core ML Specification
 
@@ -61,13 +62,14 @@ portion of the `model.proto` file.
 portion of the `NeuralNetwork.proto` file.
 - Auto-generated documentation for all the protobuf files can be found at this [link](https://apple.github.io/coremltools/coremlspecification/)
 
+
 ## User Guide and Examples
 
 - [API documentation](https://apple.github.io/coremltools)
 - [Updatable models](examples/updatable_models)
 - [Neural network inference examples](examples/neural_network_inference)
-- [Neural network guide](examples/NeuralNetworkGuide.md)
-- [Miscellaneous How-to code snippets](examples/APIExamples.md)
+- [Neural network guide](docs/NeuralNetworkGuide.md)
+- [Miscellaneous How-to code snippets](docs/APIExamples.md)
 
 ## Installation
 
@@ -94,7 +96,7 @@ virtualenv pythonenv
 To activate your new virtual environment and install `coremltools` in this
 environment, follow these steps:
 
-```shell
+```
 # Active your virtual environment
 source pythonenv/bin/activate
 

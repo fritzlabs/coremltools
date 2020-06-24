@@ -17,9 +17,6 @@ from coremltools.models import (
     _QUANTIZATION_MODE_CUSTOM_LOOKUP_TABLE
 )
 
-from coremltools.models import neural_network as neural_network
-import coremltools.models.datatypes as datatypes
-
 
 @unittest.skipIf(not coremltools.utils.is_macos() or
                  coremltools.utils.macos_version() < (10, 14),
@@ -93,7 +90,7 @@ class QuantizationNumericalCorrectnessTests(unittest.TestCase):
         # result in 0 quantization error.
 
         coreml_spec = coreml_model.get_spec()
-        quantization_utils._quantize_spec_weights(
+        quantization_utils.quantize_spec_weights(
             spec=coreml_spec,
             nbits=self.qbits,
             quantization_mode=self.qmode,
@@ -105,7 +102,7 @@ class QuantizationNumericalCorrectnessTests(unittest.TestCase):
         full_precision_model_spec = coreml_spec
 
         # Quantize model from another copy
-        quantized_model_spec = quantization_utils._quantize_spec_weights(
+        quantized_model_spec = quantization_utils.quantize_spec_weights(
             spec=coreml_model.get_spec(),
             nbits=self.qbits,
             quantization_mode=self.qmode,
@@ -472,50 +469,3 @@ class AdvancedQuantizationNumericalCorrectnessTests(unittest.TestCase):
         self.assertTrue(max_rel_err < 0.25)
         self.assertTrue(max_rel_err > 0.01)
         self.assertTrue(mean_rel_err < 0.02)
-
-
-@unittest.skipIf(not coremltools.utils.is_macos() or
-                 coremltools.utils.macos_version() < (10, 15),
-                 'Missing macOS 10.15+. Skipping tests.')
-class QuantizeWeightsAPI(unittest.TestCase):
-
-    def test_embeddingND_quantize(self):
-        input_features = [('data', datatypes.Array(10,1))]
-        output_features = [('output', None)]
-        builder = neural_network.NeuralNetworkBuilder(
-            input_features, output_features,
-            disable_rank5_shape_mapping=True)
-
-        builder.add_embedding_nd(name='embedding_nd',
-                                 input_name='data',
-                                 output_name='output',
-                                 vocab_size=300,
-                                 embedding_size=20,
-                                 W=np.random.rand(20, 300))
-
-        spec = builder.spec
-        model_fp32 = coremltools.models.MLModel(spec)
-        self.assertEqual(len(spec.neuralNetwork.layers[0].embeddingND.weights.floatValue), 6000)
-
-        # quantize to FP16
-        model_fp16 = quantization_utils.quantize_weights(model_fp32, nbits=16)
-        spec_fp16 = model_fp16.get_spec()
-        self.assertEqual(len(spec_fp16.neuralNetwork.layers[0].embeddingND.weights.floatValue), 0)
-        self.assertEqual(len(spec_fp16.neuralNetwork.layers[0].embeddingND.weights.float16Value), 2*6000)
-
-        # quantize to uint8
-        model_uint8 = quantization_utils.quantize_weights(model_fp32, nbits=8)
-        spec_uint8 = model_uint8.get_spec()
-        self.assertEqual(len(spec_uint8.neuralNetwork.layers[0].embeddingND.weights.floatValue), 0)
-        self.assertEqual(len(spec_uint8.neuralNetwork.layers[0].embeddingND.weights.float16Value), 0)
-        self.assertEqual(len(spec_uint8.neuralNetwork.layers[0].embeddingND.weights.rawValue), 6000)
-
-        # quantize to uint5
-        model_uint5 = quantization_utils.quantize_weights(model_fp32, nbits=5)
-        spec_uint5 = model_uint5.get_spec()
-        self.assertEqual(len(spec_uint5.neuralNetwork.layers[0].embeddingND.weights.floatValue), 0)
-        self.assertEqual(len(spec_uint5.neuralNetwork.layers[0].embeddingND.weights.float16Value), 0)
-        self.assertEqual(len(spec_uint5.neuralNetwork.layers[0].embeddingND.weights.rawValue), 3750) # 3750 = 5*6000/8
-
-
-

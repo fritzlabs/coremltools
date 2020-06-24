@@ -16,9 +16,9 @@ unknown_option() {
 }
 
 print_help() {
-  echo "Test the wheel by running all unit tests"
+  echo "Builds the release branch and produce a wheel to the targets directory "
   echo
-  echo "Usage: ./test_wheel.sh"
+  echo "Usage: ./make_wheel.sh"
   echo
   echo "  --wheel-path=*          Specify which wheel to test."
   echo "  --python=*              Python to use for configuration."
@@ -50,4 +50,4 @@ echo "Using python from $(which python)"
 echo
 
 $PIP_EXECUTABLE install ${WHEEL_PATH}
-$PYTEST_EXECUTABLE -ra -m "not slow" --durations=100 coremltools/test -p no:warnings
+$PYTEST_EXECUTABLE -rfXs -m "not slow" coremltools/test

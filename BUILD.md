@@ -20,14 +20,9 @@ source ./scripts/python_env.sh
 Now you can build the package as follows:
 
 ```shell
-cmake -H. -Bbuild \
-  -DPYTHON_EXECUTABLE:FILEPATH=$VIRTUAL_ENV/bin/python \
-  -DPYTHON_INCLUDE_DIR=$VIRTUAL_ENV/include/python3.7m \
-  -DPYTHON_LIBRARY=$VIRTUAL_ENV/lib
+cmake -H. -Bbuild
 make -C build -j3
 ```
-(Note that if your `virtualenv` uses a different version of Python,
-you will need to modify the `-DPYTHON_INCLUDE_DIR` value accordingly.)
 
 This build directory does not have to be identical to the `build` directory
 created by `./configure` as it is here.
@@ -40,8 +35,7 @@ dev tree into your virtualenv.
 You can run all the unit tests not marked as slow using the following command.
 
 ```shell
-pip install -e .
-pytest -rfs -m '"no slow"' coremltools/test
+pytest -rfs -m "no slow" <project_source_directory>/coremltools/test
 ```
 
 Shortcut targets to rebuild and run all the tests exist as well.
@@ -57,6 +51,7 @@ See [pytest documentation](https://docs.pytest.org/en/latest/) to learn more
 about how to run a single unit test.
 
 ### Building wheels
+
 If you would like a wheel to install outside of the virtualenv (or in it), 
 use `make -C build dist` and find the resulting wheels in `build/dist/*.whl`.
 
@@ -67,8 +62,17 @@ wheel before running unit tests, if you plan to run the tests).
 
 ### Building Documentation
 
-The API docs for this package can be build using the following:
+First install all external dependencies.
+
+```shell
+pip install Sphinx==1.8.5 sphinx-rtd-theme==0.4.3 numpydoc==0.9.1
+pip install -e git+git://github.com/michaeljones/sphinx-to-github.git#egg=sphinx-to-github
 ```
-./scripts/make_docs.sh --wheel-path=[PATH_TO_WHEEL]
+You also must have the *coremltools* package install, see the *Building*
+section. Then from the root of the repository:
+
+```shell
+cd docs
+make html
+open _build/html/index.html
 ```
-The API docs are saved at `docs/_build/html`.

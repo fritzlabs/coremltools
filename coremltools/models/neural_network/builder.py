@@ -24,10 +24,6 @@ _SUPPORTED_UPDATABLE_LAYERS = ['innerProduct', 'convolution']
 
 
 def _set_recurrent_activation(param, activation):
-
-    if isinstance(activation, bytes):
-        activation = activation.decode("utf8")
-
     activation = activation.upper() if isinstance(activation, str) else activation
     if activation == 'SIGMOID':
         param.sigmoid.MergeFromString(b'')
@@ -619,7 +615,7 @@ class NeuralNetworkBuilder(object):
                     pass
 
     def set_categorical_cross_entropy_loss(self, name, input):
-        r"""
+        """
         Categorical Cross Entropy is used for single label categorization (only one category is applicable for each data point).
 
         Parameters
@@ -866,7 +862,7 @@ class NeuralNetworkBuilder(object):
         for i, alayer in enumerate(self.nn_spec.layers[::-1]):
             if i >= last:
                 break
-            layer_type, name, in_blobs, out_blobs, params_info = _summarize_network_layer_info(alayer)
+            layer_type, name, in_blobs, out_blobs, params_info = summarize_network_layer_info(alayer)
             print('[Id: {}], Name: {} (Type: {})'.format(n_layers - i - 1, name, layer_type))
             print(' ' * 10 + 'Updatable: {}'.format(alayer.isUpdatable))
             print(' ' * 10 + 'Input blobs: {}'.format(in_blobs))
@@ -928,7 +924,7 @@ class NeuralNetworkBuilder(object):
         """
         for _, layer in enumerate(self.nn_spec.layers[::-1]):
             if layer.isUpdatable:
-                layer_type, name, in_blobs, out_blobs, _ = _summarize_network_layer_info(layer)
+                layer_type, name, in_blobs, out_blobs, _ = summarize_network_layer_info(layer)
                 print('Name: {} (Type: {})'.format(name, layer_type))
                 print(' ' * 10 + 'Input blobs: {}'.format(in_blobs))
                 print(' ' * 10 + 'Output blobs: {}'.format(out_blobs))
@@ -3281,6 +3277,7 @@ class NeuralNetworkBuilder(object):
         --------
         set_input, set_output, set_class_labels
         """
+        spec = self.spec
         if not image_input_names:
             return  # nothing to do here
 
@@ -3301,22 +3298,6 @@ class NeuralNetworkBuilder(object):
         if not isinstance(image_scale, dict):
             image_scale = dict.fromkeys(image_input_names, image_scale)
 
-        # Raise error if any key in image preprocessing parameters
-        # are not in image_input_names.
-        def check_valid_preprocessing_keys(input, target, input_name):
-            for key in input:
-                if not key in target:
-                    raise ValueError('Invalid key {} in {}.'.format(key, input_name))
-
-        target = image_input_names
-        check_valid_preprocessing_keys(is_bgr, target, 'is_bgr')
-        check_valid_preprocessing_keys(red_bias, target, 'red_bias')
-        check_valid_preprocessing_keys(blue_bias, target, 'blue_bias')
-        check_valid_preprocessing_keys(green_bias, target, 'green_bias')
-        check_valid_preprocessing_keys(gray_bias, target, 'gray_bias')
-        check_valid_preprocessing_keys(image_scale, target, 'image_scale')
-
-        spec = self.spec
         # Add image inputs
         for input_ in spec.description.input:
             if input_.name in image_input_names:
@@ -3335,9 +3316,8 @@ class NeuralNetworkBuilder(object):
                     _, channels, height, width = [array_shape[e] for e in input_indices]
 
                     if image_format == 'NHWC':
-                        # If input format is 'NHWC' for TF model, it will be
-                        # 'NCHW' for CoreML model. Therefore, add transpose to
-                        # NHWC after the input and replace all use of input
+                        # If input format is 'NHWC', then add transpose
+                        # after the input and replace all use of input
                         # with output of transpose
                         axes = [1, 2, 0]
                         if len(array_shape) == 4:

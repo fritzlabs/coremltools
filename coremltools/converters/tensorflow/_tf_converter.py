@@ -12,7 +12,6 @@ def convert(filename,
             inputs=None,
             outputs=None,
             image_input_names=None,
-            tf_image_format=None,
             is_bgr=False,
             red_bias=0.0,
             green_bias=0.0,
@@ -46,13 +45,9 @@ def convert(filename,
         Model output names.
 
     image_input_names: [str] | str
-      Input names (a subset of the keys of inputs)
+      Input names (a subset of the keys of input_name_shape_dict)
       that can be treated as images by Core ML. All other inputs
       are treated as MultiArrays.
-    tf_image_format: str
-      Optional and valid if image_input_names is also set. Specify either 'NCHW' or 'NHWC' to set or
-      override the image format. If not set, tries to use hints from the graph which may be present in convolution or
-      other image-specific layers. Ultimately defaults to NHWC.
     is_bgr: bool | dict():
       Applicable only if image_input_names is specified.
       To specify different values for each image input provide a dictionary with input names as keys and booleans as values.
@@ -128,8 +123,8 @@ def convert(filename,
 
         model = coremltools.converters.tensorflow.convert(
             './model.h5',
-             inputs={'input_1': (1, 224, 224, 3)},
-             outputs=['Identity']
+             input_name_shape_dict={'input_1': (1, 224, 224, 3)},
+             output_feature_names=['Identity']
         )
 
     For more examples, see: https://github.com/apple/coremltools/blob/master/docs/NeuralNetworkGuide.md
@@ -183,7 +178,6 @@ def convert(filename,
                              inputs=inputs,
                              outputs=outputs,
                              image_input_names=image_input_names,
-                             image_format=tf_image_format,
                              is_bgr=is_bgr,
                              red_bias=red_bias,
                              green_bias=green_bias,
@@ -211,25 +205,15 @@ def _graph_def_from_saved_model_or_keras_model(filename):
         import tensorflow as tf
         from tensorflow.python.keras.saving import saving_utils as _saving_utils
         from tensorflow.python.framework import convert_to_constants as _convert_to_constants
-        if filename.endswith('.h5'):
-            model = tf.keras.models.load_model(filename)
-            tf.keras.backend.set_learning_phase(False)
-            func = _saving_utils.trace_model_call(model)
-            concrete_func = func.get_concrete_function()
-        else:
-            model = tf.saved_model.load(filename)
-            signatures = model.signatures
-            if len(signatures) == 0:
-              raise ValueError('Unable to load a model with no signatures provided.')
-            if len(signatures) >= 2:
-              raise ValueError('Unable to load a model with multiple signatures')
-            concrete_func = list(signatures.values())[0]
+        model = tf.keras.models.load_model(filename)
+        tf.keras.backend.set_learning_phase(False)
+        func = _saving_utils.trace_model_call(model)
+        concrete_func = func.get_concrete_function()
+        # concrete_func = model.signatures[tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
         frozen_func = _convert_to_constants.convert_variables_to_constants_v2(concrete_func)
         graph_def = frozen_func.graph.as_graph_def(add_shapes=True)
     except ImportError as e:
         raise ImportError('Failed to import TensorFlow utilities. {}.'.format(e))
-    except ValueError as e:
-        raise ValueError('Failed to load SavedModel or .h5 model. {}.'.format(e))
     except Exception as e:
         raise RuntimeError('Failed to load SavedModel or .h5 model. {}.'.format(e))
     return graph_def

@@ -31,8 +31,6 @@ from ..._deps import HAS_SKLEARN as _HAS_SKLEARN
 from ... import (_MINIMUM_QUANTIZED_MODEL_SPEC_VERSION,
                  _MINIMUM_FP16_SPEC_VERSION)
 
-from coremltools.models._deprecation import deprecated
-
 
 class QuantizedLayerSelector(object):
     """ This is the base class to implement custom selectors to skip certain
@@ -60,7 +58,7 @@ class QuantizedLayerSelector(object):
     """
     def __init__(self):
         self.quantizable_layer_types = {
-            'convolution', 'innerProduct', 'embedding', 'embeddingND',
+            'convolution', 'innerProduct', 'embedding',
             'batchnorm', 'scale', 'bias', 'loadConstant',
             'simpleRecurrent', 'gru', 'uniDirectionalLSTM',
             'biDirectionalLSTM', 'batchedMatmul', 'depthwiseConv',
@@ -643,15 +641,6 @@ def _quantize_nn_spec(nn_spec, nbits, qm, **kwargs):
             if layer.embedding.hasBias:
                 _quantize_wp_field(layer.embedding.bias, nbits, qm, shape=(output_channels,), **kwargs)
 
-
-        # Embedding ND layer
-        elif layer_type == 'embeddingND':
-            output_channels = layer.embeddingND.embeddingSize
-            input_channels = layer.embeddingND.vocabSize
-            _quantize_wp_field(layer.embeddingND.weights, nbits, qm, shape=(output_channels, input_channels), **kwargs)
-            if layer.embeddingND.hasBias:
-                _quantize_wp_field(layer.embeddingND.bias, nbits, qm, shape=(output_channels,), **kwargs)
-
         # Scale layer
         elif layer_type == 'scale':
             nw = _np.prod(layer.scale.shapeScale)
@@ -754,12 +743,7 @@ def _quantize_nn_spec(nn_spec, nbits, qm, **kwargs):
             raise Exception('Unknown layer ' + layer_type + ' to be quantized')
 
 
-@deprecated(suffix="instead use 'quantize_weights'.")
 def quantize_spec_weights(spec, nbits, quantization_mode, **kwargs):
-    return _quantize_spec_weights(spec, nbits, quantization_mode, **kwargs)
-
-
-def _quantize_spec_weights(spec, nbits, quantization_mode, **kwargs):
 
     nn_model_types = ['neuralNetwork', 'neuralNetworkClassifier',
                       'neuralNetworkRegressor']
@@ -791,10 +775,10 @@ def _quantize_spec_weights(spec, nbits, quantization_mode, **kwargs):
     # Recursively convert all pipeline models
     elif spec.WhichOneof('Type') == 'pipeline':
         for model_spec in spec.pipeline.models:
-            _quantize_spec_weights(model_spec, nbits, quantization_mode, **kwargs)
+            quantize_spec_weights(model_spec, nbits, quantization_mode, **kwargs)
 
     elif spec.WhichOneof('Type') in ['pipelineClassifier', 'pipelineRegressor']:
-        _quantize_spec_weights(spec.pipeline, nbits, quantization_mode, **kwargs)
+        quantize_spec_weights(spec.pipeline, nbits, quantization_mode, **kwargs)
 
     return spec
 
@@ -1156,7 +1140,7 @@ def quantize_weights(full_precision_model,
 
     print("Quantizing using {} quantization".format(quantization_mode))
     spec = full_precision_model.get_spec()
-    qspec = _quantize_spec_weights(spec, nbits, qmode, **kwargs)
+    qspec = quantize_spec_weights(spec, nbits, qmode, **kwargs)
 
     if macos_version() < (10, 14):
         print("WARNING! Unable to return a quantized MLModel instance since"

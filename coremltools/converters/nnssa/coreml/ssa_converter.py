@@ -1,7 +1,5 @@
 import numpy as np
 
-from warnings import warn
-
 from six import string_types as _string_types
 
 from coremltools.models import datatypes
@@ -38,7 +36,6 @@ def ssa_convert(ssa,
                 inputs=None,
                 outputs=None,
                 image_input_names=None,
-                image_format=None,
                 is_bgr=False,
                 red_bias=0.0,
                 green_bias=0.0,
@@ -91,10 +88,6 @@ def ssa_convert(ssa,
     custom_shape_functions : dict of str -> functions or empty dict
         Specify custom function to compute `output` shape given `input` shape for given custom operator
         This is required for new converter path, which maintains and propagates shapes while converting operators.
-    image_format: str
-      Optional and valid if image_input_names is also set. Specify either 'NCHW' or 'NHWC' to set or
-      override the image format. If not set, tries to use hints from the graph which may be present in convolution or
-      other image-specific layers. Ultimately defaults to NHWC.
     """
     if not custom_conversion_functions:
         custom_conversion_functions = dict()
@@ -191,12 +184,7 @@ def ssa_convert(ssa,
         else:
             builder.set_class_labels(classes)
 
-    detected_image_format = ssa.get_image_format()
-    if image_format and detected_image_format and image_format != detected_image_format:
-        warn('[SSAConverter] Detected image format different from input.'
-              'Detected: {} Input: {}'.format(detected_image_format, image_format))
-    image_format = image_format or detected_image_format or 'NHWC'
-
+    image_format = ssa.get_image_format()
     # Set pre-processing parameters
     builder.set_pre_processing_parameters(image_input_names=image_input_names,
                                           is_bgr=is_bgr,
@@ -231,9 +219,7 @@ def ssa_convert(ssa,
     mlmodel_spec.description.output.extend(modified_output_features_list)
 
     # MLModel passes
-    mlmodel_passes = [remove_disconnected_layers,
-                      remove_redundant_transposes,
-                     ]
+    mlmodel_passes = [remove_disconnected_layers]
     for p in mlmodel_passes:
         p(mlmodel_spec)
 
@@ -329,7 +315,7 @@ class SSAConverter(object):
 
         self.top_builder = NeuralNetworkBuilder(input_features=top_input_features,
                                                 output_features=top_output_features,
-                                                disable_rank5_shape_mapping=True,
+                                                disable_rank5_shape_mapping=False,
                                                 mode=neural_network_type,
                                                 use_float_arraytype=True)
 
@@ -356,7 +342,6 @@ class SSAConverter(object):
             'Abs': self._convert_unary_common,
             'Add': self._convert_binary,
             'AddV2': self._convert_binary,
-            'AddN': self._convert_addn,
             'All': self._convert_reduction,
             'Any': self._convert_reduction,
             'ArgMax': self._convert_argmax,
@@ -377,7 +362,6 @@ class SSAConverter(object):
             'Cos': self._convert_unary_trigonometric,
             'DepthToSpace': self._convert_reorganize_data,
             'DepthwiseConv2dNative': self._convert_conv2d,
-            'Einsum': self._convert_einsum,
             'Elu': self._convert_unary_activation,
             'Embedding': self._convert_embedding,
             'Equal': self._convert_binary_broadcastable,
@@ -731,185 +715,6 @@ class SSAConverter(object):
         if node.op not in self.custom_shape_functions:
             raise ValueError('Custom Shape Function for {} not provided!'.format(node.op))
         shapes.propagate_single_layer(layer, self.tensor_shapes, custom_shape_function=self.custom_shape_functions[node.op])
-
-    def _convert_einsum(self, node):
-
-        input_nodes, input_names, input_types = self._get_input_tensors(node)
-        if len(input_names) > 2:
-            raise ValueError("currently, 'einsum' operation is only supported when it has less than equal to 2 inputs.")
-        equation = node.attr.get('equation')
-        if not '->' in equation:
-            raise ValueError('current einsum does not support matrix diagonal operations.')
-
-        # Helper functions
-        def get_transpose_map(prefix, suffix):
-            prefix_map = dict(zip(prefix,range(len(prefix))))
-            return [prefix_map[x] for x in suffix]
-
-        def get_product(array, map):
-            if len(array) == 0:
-                raise ValueError('equation {} not supported currently.'.format(equation))
-            result = 1
-            for num in array:
-                result *= map[num]
-            return result
-
-        # Parse equation
-        prefix = equation.split('->')[0]
-        suffix = equation.split('->')[1]
-
-        # Pattern matching
-        builder = self._get_builder()
-        if not ',' in prefix:
-            # Transpose
-            axes = get_transpose_map(prefix, suffix)
-            layer = builder.add_transpose(
-                    name = node.name,
-                    axes = axes,
-                    input_name = input_names[0],
-                    output_name = node.name)
-            shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-        else:
-            a, b = prefix.split(',')
-
-            if suffix == '':
-                # Inner Product
-                axes = get_transpose_map(a, b)
-                transpose_name = node.name + '_transpose'
-                layer = builder.add_transpose(
-                        name = transpose_name,
-                        axes = axes,
-                        input_name = input_names[0],
-                        output_name = transpose_name)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                mul_name = node.name + '_multiply'
-                layer = builder.add_multiply_broadcastable(
-                        name = mul_name,
-                        input_names = [transpose_name, input_names[1]],
-                        output_name = mul_name)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                reduce_sum_name = node.name+ '_reduce_sum'
-                layer = builder.add_reduce_sum(
-                        name = reduce_sum_name,
-                        input_name = mul_name,
-                        output_name = node.name,
-                        reduce_all = True)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-            else:
-                prefix_set = set(a).union(set(b))
-
-                # Find the dimensions to be reduced in matrix multiplication
-                dims_reduce = sorted([dim for dim in prefix_set if dim not in suffix])
-                if not all([dim in a and dim in b for dim in dims_reduce]):
-                    raise ValueError('equation {} not supported currently.'.format(equation))
-
-                # Find the batch dimensions needs to be keep
-                dims_batch = sorted([dim for dim in a if dim in b and dim in suffix])
-
-                # Find the dimensions only in a or b
-                dims_a = sorted([dim for dim in a if dim not in b and dim in suffix])
-                dims_b = sorted([dim for dim in b if dim not in a and dim in suffix])
-
-                # Sort a and b
-                a_sorted = dims_batch + dims_a + dims_reduce
-                b_sorted = dims_batch + dims_b + dims_reduce
-
-                # Transpose inputs into order of [dims_batch] + [dims_x] + [dims_reduce]
-                transpose_name_a = node.name + '_transpose_input_a_0'
-                axes = get_transpose_map(a, a_sorted)
-                layer = builder.add_transpose(
-                        name = transpose_name_a,
-                        axes = axes,
-                        input_name = input_names[0],
-                        output_name = transpose_name_a)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                transpose_name_b = node.name + '_transpose_input_b_0'
-                axes = get_transpose_map(b, b_sorted)
-                layer = builder.add_transpose(
-                        name = transpose_name_b,
-                        axes = axes,
-                        input_name = input_names[1],
-                        output_name = transpose_name_b)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                # Reshape a into [dims_batch] + product([dims_a]) + product([dims_reduce])
-                # Reshape b into [dims_batch] + product([dims_reduce]) + product([dims_b])
-                a_shape = self._get_tensor_shape_from_type(input_types[0])
-                b_shape = self._get_tensor_shape_from_type(input_types[1])
-                a_map = dict(zip(a, a_shape))
-                b_map = dict(zip(b, b_shape))
-                dims_reduce_product = get_product(dims_reduce, a_map)
-                dims_a_product = get_product(dims_a, a_map)
-                dims_b_product = get_product(dims_b, b_map)
-
-                a_output_shape = map(lambda x:a_map[x], dims_batch) + \
-                                 [dims_a_product] + \
-                                 [dims_reduce_product]
-
-                b_output_shape = map(lambda x:b_map[x], dims_batch) + \
-                                 [dims_b_product] + \
-                                 [dims_reduce_product]
-
-                reshape_name_a = node.name + '_reshape_input_a_0'
-                layer = builder.add_reshape_static(
-                        name = reshape_name_a,
-                        input_name = transpose_name_a,
-                        output_name = reshape_name_a,
-                        output_shape = tuple(a_output_shape))
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                reshape_name_b_0 = node.name + '_reshape_input_b_0'
-                layer = builder.add_reshape_static(
-                        name = reshape_name_b_0,
-                        input_name = transpose_name_b,
-                        output_name = reshape_name_b_0,
-                        output_shape = tuple(b_output_shape))
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                batch_num = len(dims_batch)
-                axes = range(batch_num) + [batch_num+1, batch_num]
-                reshape_name_b = node.name + '_reshape_input_b_0_1'
-                layer = builder.add_transpose(
-                        name = reshape_name_b,
-                        axes = axes,
-                        input_name = reshape_name_b_0,
-                        output_name = reshape_name_b)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                # Batch matrix multiplication
-                # Result should be in shape [dims_batch] + product([dims_a]) + product([dims_b])
-                batch_mat_mul_name = node.name + '_batch_mat_mul'
-                layer = builder.add_batched_mat_mul(
-                        name = batch_mat_mul_name,
-                        input_names = [reshape_name_a, reshape_name_b],
-                        output_name = batch_mat_mul_name)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                # Reshape tensor to [dims_batch] + [dims_a] + [dims_b]
-                reshape_name = node.name + '_reshape'
-                output_shape = map(lambda x: a_map[x], dims_batch) + \
-                               map(lambda x: a_map[x], dims_a) + \
-                               map(lambda x: b_map[x], dims_b)
-                layer = builder.add_reshape_static(
-                        name = reshape_name,
-                        input_name = batch_mat_mul_name,
-                        output_name = reshape_name,
-                        output_shape = tuple(output_shape))
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-                # Transpose tensor to suffix
-                transpose_name = node.name + '_transpose'
-                axes = get_transpose_map(dims_batch + dims_a + dims_b, suffix)
-                layer = builder.add_transpose(
-                        name = transpose_name,
-                        axes = axes,
-                        input_name = reshape_name,
-                        output_name = node.name)
-                shapes.propagate_single_layer(layer, self.tensor_shapes)
 
     def _convert_transpose(self, node):
         """ Convert a transpose op.
@@ -1471,26 +1276,6 @@ class SSAConverter(object):
             output_name=node.name)
         shapes.propagate_single_layer(layer, self.tensor_shapes)
 
-    def _convert_addn(self, node):
-
-        # TODO: Support single value addn
-        # Blocked by a bug in coremltools
-        if len(node.inputs) <= 1:
-            raise ValueError("Only supports two or more inputs for add_n operation.")
-        input_nodes, input_names, input_types = self._get_input_tensors(node)
-        prev_name = input_names[0]
-        for i in range(1,len(input_names)):
-
-            node_name = node.name + '_' + str(i)
-            output_name = node.name if i == len(input_names) -1 else node_name
-
-            layer = self._get_builder().add_elementwise(
-                name=node_name, input_names=[prev_name, input_names[i]],
-                output_name=output_name, mode='ADD')
-            shapes.propagate_single_layer(layer, self.tensor_shapes)
-
-            prev_name = node_name
-
     def _convert_concat_nd(self, node):
         assert len(node.inputs) > 1
         input_nodes, input_names, input_types = self._get_input_tensors(node)
@@ -1653,17 +1438,16 @@ class SSAConverter(object):
                 self.op_tensor_map[node.name] = input_names
             else:
                 layer = self._get_builder().add_expand_dims(
-                    name=node.name, input_name=input_names[0], output_name=node.name, axes=[axis])
+                    name=node.name, input_name=input_names[0], output_name=node.name, axes=[0])
         else:
             if all([_is_scalar(input_type) for input_type in input_types]):
                 layer = self._get_builder().add_concat_nd(
                     name=node.name, input_names=input_names, output_name=node.name, axis=axis)
             else:
-                if axis == -1:
-                    axis = len(input_types[0].get_shape())
                 layer = self._get_builder().add_stack(
                     name=node.name, input_names=input_names, output_name=node.name, axis=axis)
-        shapes.propagate_single_layer(layer, self.tensor_shapes)
+
+        self.tensor_shapes[node.name] = self._get_tensor_shape_from_type(node.datatype)
 
     def _convert_unpack(self, node):
         input_nodes, input_names, input_types = self._get_input_tensors(node)
@@ -2202,7 +1986,7 @@ class SSAConverter(object):
         top, bottom = paddings[1][0], paddings[1][1]
 
         if node.attr.get('mode', '').lower() == 'symmetric':
-            warn('[SSAConverter]Warning: Symmetric MirrorPad is not supported'
+            print('[SSAConverter]Warning: Symmetric MirrorPad is not supported'
                   'but can be approximated with non-symmetric padding in some'
                   'cases. Conversion will continue, but expect some loss'
                   'of model accuracy.')
@@ -2644,7 +2428,7 @@ class SSAConverter(object):
                     raise ValueError("Incorrect configuration!! Alpha not provided for Elementwise Div operator")
                 alpha = 1 / float(alpha)
             elif op == 'sub':
-                if alpha is not None and inputs[0] == input_names[0]:
+                if alpha and inputs[0] == input_names[0]:
                     alpha = -alpha
                 else:
                     neg_index = 1

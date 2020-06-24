@@ -3,23 +3,16 @@
 # Use of this source code is governed by a BSD-3-clause license that can be
 # found in the LICENSE.txt file or at https://opensource.org/licenses/BSD-3-Clause
 
-from .spec_inspection_utils import _get_feature_description_summary, \
-                            _summarize_neural_network_spec_code_style, \
-                            _summarize_neural_network_spec
+from .spec_inspection_utils import *
 
-from coremltools.models._deprecation import deprecated
 
-@deprecated
 def print_network_spec_parameter_info_style(mlmodel_spec, interface_only=False):
-    return _print_network_spec_parameter_info_style(mlmodel_spec, interface_only=interface_only)
-
-def _print_network_spec_parameter_info_style(mlmodel_spec, interface_only=False):
     """ Print the network information summary.
     Args:
     mlmodel_spec : the mlmodel spec
     interface_only : Shows only the input and output of the network
     """
-    inputs, outputs, layers_info = _summarize_neural_network_spec(mlmodel_spec)
+    inputs, outputs, layers_info = summarize_neural_network_spec(mlmodel_spec)
 
     print('Inputs:')
     for i in inputs:
@@ -48,19 +41,16 @@ def _print_network_spec_parameter_info_style(mlmodel_spec, interface_only=False)
 
     print('\n')
 
-@deprecated
-def print_network_spec_coding_style(mlmodel_spec, interface_only=False):
-    return _print_network_spec_coding_style(mlmodel_spec, interface_only=interface_only)
 
-def _print_network_spec_coding_style(mlmodel_spec, interface_only=False):
+def print_network_spec_coding_style(mlmodel_spec, interface_only=False):
     """
     Args:
     mlmodel_spec : the mlmodel spec
     interface_only : Shows only the input and output of the network
     """
 
-    inputs = [(blob.name, _get_feature_description_summary(blob)) for blob in mlmodel_spec.description.input]
-    outputs = [(blob.name, _get_feature_description_summary(blob)) for blob in mlmodel_spec.description.output]
+    inputs = [(blob.name, get_feature_description_summary(blob)) for blob in mlmodel_spec.description.input]
+    outputs = [(blob.name, get_feature_description_summary(blob)) for blob in mlmodel_spec.description.output]
 
     input_names = []
     print('Inputs:')
@@ -93,7 +83,7 @@ def _print_network_spec_coding_style(mlmodel_spec, interface_only=False):
         return
 
     print('\n')
-    _summarize_neural_network_spec_code_style(nn_spec, input_names=input_names, output_names=output_names)
+    summarize_neural_network_spec_code_style(nn_spec, input_names=input_names, output_names=output_names)
 
 
 def print_network_spec(mlmodel_spec, interface_only=False, style=''):
@@ -105,6 +95,6 @@ def print_network_spec(mlmodel_spec, interface_only=False, style=''):
     """
 
     if style == 'coding':
-        _print_network_spec_coding_style(mlmodel_spec, interface_only=interface_only)
+        print_network_spec_coding_style(mlmodel_spec, interface_only=interface_only)
     else:
-        _print_network_spec_parameter_info_style(mlmodel_spec, interface_only=interface_only)
+        print_network_spec_parameter_info_style(mlmodel_spec, interface_only=interface_only)
